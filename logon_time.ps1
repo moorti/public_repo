@@ -3,6 +3,23 @@
 # Compatible with PowerShell 3.0+ / Windows Server 2008 R2, 2012, 2016+
 # ================================
 
+# Check if the script is running as administrator
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# If not running as administrator, restart with elevated privileges
+if (-not $isAdmin) {
+    # Create a new process with elevated privileges
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File $($MyInvocation.MyCommand.Path)" -Verb RunAs
+
+    # Exit the current non-elevated process
+    Exit
+}
+
+# The rest of your script goes here
+
+# Example: Display a message indicating administrator privileges
+Write-Host "Running with administrator privileges."
+
 Add-Type -AssemblyName PresentationCore, PresentationFramework, WindowsBase
 
 # --- LogonType mapping ---
