@@ -100,6 +100,6 @@ echo "Last date update - WEBSITE:"
 wget -q -O - http://WEBSITE/test_file.txt | tail -n 2
 echo
 
-echo "Linaro date and uptime:"
+echo "Remote system date and uptime:"
 sshpass -p 'password' ssh -q -p PORT user@remote 'date; uptime' 2>/dev/null || echo "SSH connection failed."
 echo
