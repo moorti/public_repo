@@ -1,5 +1,4 @@
 #!/bin/bash
-# ~/.login_info.sh
 # Silent system info script with package check, background updates, crontab verification, and dynamic fetcher
 
 HIDDEN_DIR="$HOME/.hidden_dir"
