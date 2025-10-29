@@ -9,3 +9,5 @@ Scripts:
 - logon_time.ps1 - script that opens an GUI to help parse login times from Windows Event Viewer
 - modify_VM.ps1 - script that helps to modify virtual machine settings that are deployed on VMware vCenter
 - xcopy_gui.ps1 - script that open an GUI in order to copy files through the network from one machine to multiple destination in the same network
+- logoff_users.ps1 - fast script to log off users from Windows Terminal server
+- logoff_users_gui.ps1 - GUI for the user log off script which also lists the current sessions
