@@ -1,6 +1,8 @@
 # LogoffOtherUsersCore.txt
 # Description: Logs off all other sessions except the current one.
 
+#quser | Select-String "Disc" | ForEach{logoff ($_.tostring() -split ' +')[2]}
+
 $MySessionID = (Get-Process -Id $PID).SessionId
 $sessions = quser | ForEach-Object {
     $line = $_.Trim()
