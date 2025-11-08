@@ -1,149 +1,148 @@
-
-# ------------------------------
-# Admin Elevation
-# ------------------------------
+# Check if the script is running as administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# If not running as administrator, restart with elevated privileges
 if (-not $isAdmin) {
-    Start-Process "powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`"" -Verb RunAs
+    # Create a new process with elevated privileges
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File $($MyInvocation.MyCommand.Path)" -Verb RunAs
+
+    # Exit the current non-elevated process
     Exit
 }
 
-# ------------------------------
-# Load Windows Forms
-# ------------------------------
+
+# ==============================
+# Session Manager GUI (EXE-ready, no extra windows)
+# ==============================
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# ---------- GUI Form ----------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Logoff Other Users"
-$form.Size = New-Object System.Drawing.Size(650,550)
+$form.Text = "Session Manager"
+$form.Size = New-Object System.Drawing.Size(700,450)
 $form.StartPosition = "CenterScreen"
+$form.Topmost = $true
 
-$refreshButton = New-Object System.Windows.Forms.Button
-$refreshButton.Location = New-Object System.Drawing.Point(10,10)
-$refreshButton.Size = New-Object System.Drawing.Size(300,40)
-$refreshButton.Text = "Refresh Sessions"
+# ---------- ListView ----------
+$listView = New-Object System.Windows.Forms.ListView
+$listView.View = [System.Windows.Forms.View]::Details
+$listView.FullRowSelect = $true
+$listView.GridLines = $true
+$listView.CheckBoxes = $true
+$listView.Width = 660
+$listView.Height = 300
+$listView.Location = New-Object System.Drawing.Point(10,10)
+$listView.Columns.Add("Session ID",80)
+$listView.Columns.Add("Username",120)
+$listView.Columns.Add("State",120)
+$listView.Columns.Add("Idle Time",100)
+$listView.Columns.Add("Logon Time",200)
+$form.Controls.Add($listView)
 
-$logoffButton = New-Object System.Windows.Forms.Button
-$logoffButton.Location = New-Object System.Drawing.Point(320,10)
-$logoffButton.Size = New-Object System.Drawing.Size(250,40)
-$logoffButton.Text = "Logoff Other Users"
+# ---------- Buttons ----------
+$btnRefresh = New-Object System.Windows.Forms.Button
+$btnRefresh.Text = "Refresh Sessions"
+$btnRefresh.Width = 150
+$btnRefresh.Location = New-Object System.Drawing.Point(10, 330)
+$form.Controls.Add($btnRefresh)
 
-$textBox = New-Object System.Windows.Forms.TextBox
-$textBox.Location = New-Object System.Drawing.Point(10,60)
-$textBox.Size = New-Object System.Drawing.Size(600,450)
-$textBox.Multiline = $true
-$textBox.ScrollBars = "Vertical"
-$textBox.ReadOnly = $true
-$textBox.Font = New-Object System.Drawing.Font("Consolas",10)
+$btnLogoffDisc = New-Object System.Windows.Forms.Button
+$btnLogoffDisc.Text = "Logoff Disconnected"
+$btnLogoffDisc.Width = 150
+$btnLogoffDisc.Location = New-Object System.Drawing.Point(180, 330)
+$form.Controls.Add($btnLogoffDisc)
 
-# ------------------------------
-# Detect current session ID reliably
-# ------------------------------
-function Get-MySessionID {
-    $username = $env:USERNAME
-    $mySessionID = $null
-    $sessions = qwinsta 2>&1 | ForEach-Object { $_.Trim() }
-    foreach ($line in $sessions) {
-        if ($line -match "^\s*(\S+)\s+(\S+)\s+(\d+)\s+(\S+)") {
-            $sessUser = $matches[2]
-            $sessID   = [int]$matches[3]
-            if ($sessUser -eq $username -and $sessID -ne 0) {
-                $mySessionID = $sessID
-                break
+$btnLogoffSelected = New-Object System.Windows.Forms.Button
+$btnLogoffSelected.Text = "Logoff Selected"
+$btnLogoffSelected.Width = 150
+$btnLogoffSelected.Location = New-Object System.Drawing.Point(350, 330)
+$form.Controls.Add($btnLogoffSelected)
+
+# ---------- Hidden Process Function ----------
+function Run-CommandHidden {
+    param($exe, $args="")
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.Arguments = $args
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $output = $proc.StandardOutput.ReadToEnd()
+    $proc.WaitForExit()
+    return $output
+}
+
+$quserExe = Join-Path $env:windir "System32\quser.exe"
+$logoffExe = Join-Path $env:windir "System32\logoff.exe"
+
+# ---------- Refresh Sessions ----------
+function Refresh-Sessions {
+    $listView.Items.Clear()
+    $sessions = Run-CommandHidden $quserExe
+    if (-not $sessions) { return }
+
+    foreach ($line in $sessions -split "`n") {
+        if ($line -match "USERNAME") { continue }
+        $parts = ($line -split '\s{2,}') | Where-Object {$_ -ne ""}
+        if ($parts.Length -ge 3) {
+            $sessionId = $parts[1]
+            $username = $parts[0]
+            $state = $parts[2]
+            $idle = if ($parts.Length -ge 4) { $parts[3] } else { "" }
+            $logon = if ($parts.Length -ge 5) { $parts[4] } else { "" }
+
+            $item = New-Object System.Windows.Forms.ListViewItem($sessionId)
+            $item.SubItems.Add($username)
+            $item.SubItems.Add($state)
+            $item.SubItems.Add($idle)
+            $item.SubItems.Add($logon)
+
+            if ($state -match "Disc") {
+                $item.BackColor = [System.Drawing.Color]::Red
+                $item.ForeColor = [System.Drawing.Color]::White
+            } elseif ($state -match "Active") {
+                $item.BackColor = [System.Drawing.Color]::LightGreen
+            } else {
+                $item.BackColor = [System.Drawing.Color]::LightGray
             }
+
+            $listView.Items.Add($item)
         }
     }
-    return $mySessionID
 }
 
-# ------------------------------
-# Get all other user sessions
-# ------------------------------
-function Get-Sessions {
-    $mySessionID = Get-MySessionID
-    $sessions = @()
-
-    $lines = qwinsta 2>&1 | ForEach-Object { $_.Trim() } | Where-Object { $_ -and ($_ -notmatch "USERNAME|Services|SYSTEM") }
-
-    foreach ($line in $lines) {
-        if ($line -match "^\s*(\S+)\s+(\S+)\s+(\d+)\s+(\S+)") {
-            $sessName  = $matches[1]
-            $sessUser  = $matches[2]
-            $sessID    = [int]$matches[3]
-            $sessState = $matches[4]
-
-            # Skip console (0), SYSTEM/Services, and your session
-            if ($sessID -ne 0 -and $sessID -ne $mySessionID -and $sessUser -ne "SYSTEM" -and $sessUser -ne "Services") {
-                $sessions += [PSCustomObject]@{
-                    SessionName = $sessName
-                    Username    = $sessUser
-                    SessionID   = $sessID
-                    State       = $sessState
-                }
-            }
-        }
+# ---------- Logoff Disconnected ----------
+function Logoff-Disconnected {
+    $sessions = Run-CommandHidden $quserExe
+    $disconnected = $sessions -split "`n" | Where-Object {$_ -match "Disc"}
+    foreach ($line in $disconnected) {
+        $sid = ($line -split '\s+')[2]
+        try { Run-CommandHidden $logoffExe $sid } catch {}
     }
-    return $sessions
+    Refresh-Sessions
 }
 
-# ------------------------------
-# Display sessions safely
-# ------------------------------
-function Show-Sessions {
-    $textBox.Clear()
-    $textBox.AppendText("Your session ID: $(Get-MySessionID)`r`n`r`n")
-
-    $sessions = Get-Sessions
-    if ($sessions.Count -eq 0) {
-        $textBox.AppendText("No other sessions found.`r`n")
-        return
+# ---------- Logoff Selected ----------
+function Logoff-Selected {
+    $checked = $listView.CheckedItems
+    foreach ($item in $checked) {
+        $sid = $item.Text
+        try { Run-CommandHidden $logoffExe $sid } catch {}
     }
-
-    $textBox.AppendText("Current sessions:`r`n")
-    foreach ($s in $sessions) {
-        $username  = if ($s.Username) { $s.Username } else { "<none>" }
-        $sessionID = if ($s.SessionID) { $s.SessionID } else { 0 }
-        $state     = if ($s.State) { $s.State } else { "<unknown>" }
-
-        $textBox.AppendText("$username".PadRight(20) + "$sessionID".PadRight(6) + "$state".PadRight(10) + "`r`n")
-    }
-    $textBox.AppendText("`r`n")
+    Refresh-Sessions
 }
 
-# ------------------------------
-# Button click events
-# ------------------------------
-$refreshButton.Add_Click({ Show-Sessions })
+# ---------- Button Events ----------
+$btnRefresh.Add_Click({ Refresh-Sessions })
+$btnLogoffDisc.Add_Click({ Logoff-Disconnected })
+$btnLogoffSelected.Add_Click({ Logoff-Selected })
 
-$logoffButton.Add_Click({
-    $sessions = Get-Sessions
-    if ($sessions.Count -eq 0) {
-        $textBox.AppendText("No sessions to log off.`r`n")
-        return
-    }
+# ---------- Initial Load ----------
+Refresh-Sessions
 
-    $textBox.AppendText("Logging off other users...`r`n")
-    foreach ($s in $sessions) {
-        $username  = if ($s.Username) { $s.Username } else { "<none>" }
-        $sessionID = if ($s.SessionID) { $s.SessionID } else { 0 }
-        $state     = if ($s.State) { $s.State } else { "<unknown>" }
-
-        try {
-            logoff $sessionID /V 2>&1 | Out-Null
-            $textBox.AppendText("$username (Session $sessionID, State $state) logged off.`r`n")
-        } catch {
-            $textBox.AppendText("Failed to log off $username (Session $sessionID)`r`n")
-        }
-    }
-    $textBox.AppendText("Done.`r`n`r`n")
-    Show-Sessions
-})
-
-# ------------------------------
-# Add controls and show form
-# ------------------------------
-$form.Controls.Add($refreshButton)
-$form.Controls.Add($logoffButton)
-$form.Controls.Add($textBox)
+# ---------- Show GUI ----------
 [void]$form.ShowDialog()
