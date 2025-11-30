@@ -3,6 +3,7 @@
 
 HIDDEN_DIR="$HOME/.hidden_dir"
 CHECKFILE="$HIDDEN_DIR/.pkg_check_done"
+LASTIPFILE="$HIDDEN_DIR/.last_ip.txt"
 WEATHERFILE="$HIDDEN_DIR/.weather.txt"
 SPEEDFILE="$HIDDEN_DIR/.speed.txt"
 PKGS=("fastfetch" "neofetch" "duf" "wget" "sshpass" "curl" "speedtest")
@@ -71,15 +72,42 @@ echo
 duf --hide-fs squashfs 2>/dev/null || { echo "duf not available, using df:"; df -h | grep -v loop; }
 echo
 
-# Current IP
-echo "Current IP:"
-wget -qO- http://ipinfo.io/ip || echo "N/A"
-echo
-echo
 
-# Last IP
+# Current IP (trimmed)
+current=$(wget -qO- http://ipinfo.io/ip 2>/dev/null | tr -d ' \r\n\t')
+[ -z "$current" ] && current="N/A"
+
+echo "Current IP:"
+echo "$current"
+echo
 echo "Last IP:"
-tail -1 "$HIDDEN_DIR/.last_ip.txt" 2>/dev/null || echo "N/A"
+
+if [ "$current" = "N/A" ]; then
+    tail -1 "$LASTIPFILE" 2>/dev/null || echo "N/A"
+else
+    prev=""
+    if [ -f "$LASTIPFILE" ]; then
+        # Use awk to read file, trim lines, keep non-empty, and scan backwards to find first != current
+        prev=$(awk -v cur="$current" '{
+            g=$0
+            sub(/^[ \t\r\n]+/,"",g)
+            sub(/[ \t\r\n]+$/,"",g)
+            if (g != "") lines[++n] = g
+        }
+        END {
+            for (i = n; i >= 1; --i) {
+                if (lines[i] != cur) { print lines[i]; exit }
+            }
+        }' "$LASTIPFILE" 2>/dev/null)
+    fi
+
+    if [ -n "$prev" ]; then
+        echo "$prev"
+    else
+        echo "N/A"
+    fi
+fi
+
 echo
 
 # Latest speed test
