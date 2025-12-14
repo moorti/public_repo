@@ -1,0 +1,17 @@
+---
+- hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Get hostname + uptime + OS version (silent, not changed)
+      shell: |
+        echo "Hostname : $(hostname)"
+        echo "Uptime   : $(uptime)"
+        echo "OS       : $(cat /etc/redhat-release)"
+      register: info
+      no_log: true
+      changed_when: false
+
+    - name: Print combined info
+      debug:
+        msg: "{{ info.stdout }}"
