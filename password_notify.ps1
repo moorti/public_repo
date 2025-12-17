@@ -145,12 +145,14 @@ IT Team
             -Bcc $Bcc `
             -Subject $Subject `
             -Body $Body `
+            -Encoding 'utf8' `
             -SmtpServer $SmtpServer `
             -Port $SmtpPort `
             -UseSsl `
             -Credential $Cred
 
         Write-Log "Email sent to $Email"
+        Start-Sleep -Seconds 5
     }
     catch {
         Write-Log "ERROR sending email to $Email : $_"
